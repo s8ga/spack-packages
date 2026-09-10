@@ -36,7 +36,9 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
     url = "https://github.com/abacusmodeling/abacus-develop/archive/refs/tags/v3.9.0.19.tar.gz"
     git = "https://github.com/abacusmodeling/abacus-develop.git"
 
-    maintainers("bitllion", "s8ga")
+    # bitllion is the current maintainer of this recipe; to be re-added
+    # (with consent) when the big PR is finalized.
+    maintainers("s8ga")
 
     license("LGPL-3.0-or-later")
 
@@ -132,8 +134,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         "pexsi",
         default=False,
         when="+lcao",
-        description="Enable PEXSI for large-scale electronic structure "
-        "(requires LCAO)",
+        description="Enable PEXSI for large-scale electronic structure (requires LCAO)",
     )
 
     # Optional scientific libraries (all versions)
@@ -181,8 +182,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         "nccl",
         default=False,
         when="+cuda",
-        description="Enable NCCL-backed multi-GPU collectives "
-        "(ENABLE_NCCL_PARALLEL_DEVICE)",
+        description="Enable NCCL-backed multi-GPU collectives (ENABLE_NCCL_PARALLEL_DEVICE)",
     )
     variant(
         "cusolvermp",
@@ -194,8 +194,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         "cublasmp",
         default=False,
         when="+cusolvermp",
-        description="Enable cuBLASMp distributed GPU BLAS "
-        "(requires +cusolvermp)",
+        description="Enable cuBLASMp distributed GPU BLAS (requires +cusolvermp)",
     )
 
     depends_on("c", type="build")
@@ -374,9 +373,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
             self.define_from_variant("ENABLE_PEXSI", "pexsi"),
             self.define_from_variant("ENABLE_RAPIDJSON", "rapidjson"),
             self.define_from_variant("ENABLE_FLOAT_FFTW", "float-fftw"),
-            self.define_from_variant(
-                "ENABLE_NATIVE_OPTIMIZATION", "native-optimization"
-            ),
+            self.define_from_variant("ENABLE_NATIVE_OPTIMIZATION", "native-optimization"),
             self.define_from_variant("DEBUG_INFO", "debug"),
             self.define_from_variant("USE_ABACUS_LIBM", "mathlib"),
             # --- GPU acceleration (variant-driven) ---
@@ -399,18 +396,14 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         # version and is stable across MKL releases.
         if "^intel-oneapi-mkl" in spec:
             mkl = spec["intel-oneapi-mkl"]
-            args.append(
-                self.define("MKLROOT", join_path(mkl.prefix, "mkl", "latest"))
-            )
+            args.append(self.define("MKLROOT", join_path(mkl.prefix, "mkl", "latest")))
         else:
             args.append(self.define("FFTW3_DIR", spec["fftw-api"].prefix))
 
         # Cereal: FindCereal expects CEREAL_INCLUDE_DIR = the include dir
         # itself (it searches for cereal/cereal.hpp under it).
         if "+lcao" in spec:
-            args.append(
-                self.define("CEREAL_INCLUDE_DIR", spec["cereal"].prefix.include)
-            )
+            args.append(self.define("CEREAL_INCLUDE_DIR", spec["cereal"].prefix.include))
 
         # ELPA: FindELPA uses ELPA_DIR (prefix); it has a built-in #3589
         # guard that rejects /usr/include/elpa system hits when ELPA_DIR is
@@ -450,9 +443,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
             # addition, where CMake finds these transitively.
             if not spec.satisfies("@3.11.0:"):
                 args.append(self.define("ParMETIS_DIR", spec["parmetis"].prefix))
-                args.append(
-                    self.define("SuperLU_DIST_DIR", spec["superlu-dist"].prefix)
-                )
+                args.append(self.define("SuperLU_DIST_DIR", spec["superlu-dist"].prefix))
 
         # DeePMD: variable-driven (DEFINED DeePMD_DIR enables it; no option).
         if "+deepmd" in spec:
@@ -467,9 +458,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
             args.append(self.define("ENABLE_PAW", False))
             if "+deepks" in spec:
                 self._add_torch_args(args, spec)
-                args.append(
-                    self.define("libnpy_INCLUDE_DIR", spec["libnpy"].prefix.include)
-                )
+                args.append(self.define("libnpy_INCLUDE_DIR", spec["libnpy"].prefix.include))
 
         elif spec.satisfies("@3.9.0.10:"):
             # develop new build system
@@ -480,9 +469,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
 
             if "+mlalgo" in spec:
                 self._add_torch_args(args, spec)
-                args.append(
-                    self.define("libnpy_INCLUDE_DIR", spec["libnpy"].prefix.include)
-                )
+                args.append(self.define("libnpy_INCLUDE_DIR", spec["libnpy"].prefix.include))
 
             # NEP was introduced on the develop line @3.9.0.27
             if "+nep" in spec:
@@ -523,8 +510,9 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         matches = glob.glob(pattern)
         if not matches:
             raise InstallError(
-                "TorchConfig.cmake not found under py-torch prefix. "
-                "Expected pattern: {0}".format(pattern)
+                "TorchConfig.cmake not found under py-torch prefix. Expected pattern: {0}".format(
+                    pattern
+                )
             )
         args.append(self.define("Torch_DIR", matches[0]))
 
