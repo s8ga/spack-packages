@@ -17,7 +17,20 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
     """ABACUS (Atomic-orbital Based Ab-initio Computation at UStc)
     is an open-source computer code package aiming
     for large-scale electronic-structure simulations
-    from first principles"""
+    from first principles
+
+    Version support policy (TEMPORARY): the moving develop branch is
+    intentionally NOT packaged here -- it has diverged from the 3.9.0.x
+    line (PEXSI CMake config switch, LibComm auto-discovery, ...) and
+    tracking a moving target breaks reproducibility. The develop line is
+    capped at v3.9.0.27; support returns when the next line (3.11.x)
+    stabilizes. LTS 3.10.x is unaffected.
+
+    NOTE for +deepks/+mlalgo: ABACUS uses the torch::linalg C++ namespace,
+    removed in pytorch 2.5, so these variants need py-torch@2.1:2.4 --
+    versions that spack-packages marks deprecated. Install with
+    `spack install --deprecated` until ABACUS migrates to the
+    torch::linalg_* namespace."""
 
     homepage = "http://abacus.ustc.edu.cn/"
     url = "https://github.com/abacusmodeling/abacus-develop/archive/refs/tags/v3.9.0.19.tar.gz"
@@ -27,7 +40,9 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
 
     license("LGPL-3.0-or-later")
 
-    version("develop", branch="develop")
+    # NOTE: no "develop" branch version on purpose -- see the version support
+    # policy in the class docstring. Highest supported develop-line release:
+    # 3.9.0.27. LTS 3.10.x is unaffected. Revisit when 3.11.x stabilizes.
     version("3.10.1", sha256="06873eba8a4e0bc085177a6580455b28e4b62ea8a18f8afe71a02105756d91a0")
     version(
         "3.10.0",
@@ -86,8 +101,10 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
     variant("elpa", default=True, description="Enable ELPA support")
     variant("libxc", default=True, description="Enable LibXC support")
 
-    # Core build options (all versions)
-    variant("mpi", default=True, description="Enable MPI parallelization")
+    # Core build options (all versions).
+    # NOTE: there is deliberately no "mpi" variant: ABACUS is an MPI code and
+    # serial builds are not supported upstream, so MPI is an unconditional
+    # dependency (see depends_on("mpi") below).
     variant(
         "float-fftw",
         default=True,
@@ -110,13 +127,13 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         "only useful for old compilers lacking optimized libm)",
     )
 
-    # Variants gated on LCAO and/or MPI (forced OFF by CMake otherwise)
+    # Variants gated on LCAO (forced OFF by CMake otherwise)
     variant(
         "pexsi",
         default=False,
-        when="+lcao+mpi",
+        when="+lcao",
         description="Enable PEXSI for large-scale electronic structure "
-        "(requires LCAO+MPI)",
+        "(requires LCAO)",
     )
 
     # Optional scientific libraries (all versions)
@@ -126,12 +143,10 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
 
     # ML: follow upstream option names exactly.
     #   LTS (3.10.x) uses ENABLE_DEEPKS
-    #   develop @3.9.0.8: uses ENABLE_MLALGO (unified DeePKS + ML-KEDF)
-    # Two variants with disjoint version ranges (the OR of two `when` clauses
-    # on `mlalgo` covers develop 3.9.0.x + the moving develop version while
-    # excluding LTS 3.10.x, which sits in between on the version axis).
-    # Requesting the absent variant on a given version auto-errors (spack:
-    # "variant not found").
+    #   develop line @3.9.0.8: uses ENABLE_MLALGO (unified DeePKS + ML-KEDF)
+    # `mlalgo` covers the 3.9.0.x develop line (up to the 3.9.0.27 cap, see
+    # docstring) while excluding LTS 3.10.x. Requesting the absent variant on
+    # a given version auto-errors (spack: "variant not found").
     variant(
         "deepks",
         default=False,
@@ -144,20 +159,14 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         when="@3.9.0.10:3.9.0.27",
         description="ML algorithms: DeePKS + ML-KEDF (maps to ENABLE_MLALGO, develop)",
     )
-    variant(
-        "mlalgo",
-        default=False,
-        when="@3.11.0-beta.1:",
-        description="ML algorithms: DeePKS + ML-KEDF (maps to ENABLE_MLALGO, develop)",
-    )
 
     # New features on the develop line (version-gated to their introduction).
-    # NEP lands in 3.9.0.27 and is develop-only: 3.10.x LTS (which sorts
-    # between 3.9.0.x and 3.11.x) never gained FindNEP, so it is excluded.
+    # NEP lands in 3.9.0.27 (develop-line cap) : 3.10.x LTS never gained
+    # FindNEP, so it is excluded.
     variant(
         "nep",
         default=False,
-        when="@3.9.0.27,3.11.0-beta.1:",
+        when="@3.9.0.27",
         description="Enable NEP neuroevolution potential (FindNEP.cmake)",
     )
 
@@ -165,20 +174,20 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
     variant(
         "cuda-mpi",
         default=False,
-        when="+cuda +mpi",
+        when="+cuda",
         description="Enable CUDA-aware MPI (USE_CUDA_MPI)",
     )
     variant(
         "nccl",
         default=False,
-        when="+cuda +mpi",
+        when="+cuda",
         description="Enable NCCL-backed multi-GPU collectives "
         "(ENABLE_NCCL_PARALLEL_DEVICE)",
     )
     variant(
         "cusolvermp",
         default=False,
-        when="+cuda +mpi",
+        when="+cuda",
         description="Enable cuSOLVERMp distributed GPU solver",
     )
     variant(
@@ -193,8 +202,11 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
     depends_on("cxx", type="build")
     depends_on("fortran", type="build")
 
-    # MPI
-    depends_on("mpi", when="+mpi")
+    # MPI is unconditional: serial (~MPI) builds are not supported by ABACUS.
+    # The deprecated 2.2.x makefile build is serial-only and likewise not
+    # supported; those versions carry deprecated=True and are kept for
+    # reproducibility of old environments only.
+    depends_on("mpi")
 
     # FFTW: the CMake line uses the fftw-api virtual (MKL can provide it);
     # the deprecated 2.2.x makefile build keeps the direct dependency its
@@ -215,7 +227,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
     # line, MKL on the deprecated 2.2.x makefile one.
     depends_on("openblas", when="build_system=cmake")
     depends_on("mkl", when="build_system=makefile")
-    depends_on("scalapack", when="+lcao+mpi")
+    depends_on("scalapack", when="+lcao")
 
     # LCAO dependencies
     depends_on("cereal")
@@ -246,6 +258,8 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
     # removed in pytorch 2.5 (2024-10; functions moved to torch::linalg_*
     # prefix). develop HEAD is mid-migration but still uses the old namespace,
     # so every ABACUS version (LTS + develop) requires py-torch <= 2.4.
+    # spack-packages deprecates py-torch@:2.9 wholesale, so +deepks/+mlalgo
+    # need `spack install --deprecated` (see also the docstring note).
     depends_on("py-torch@2.1:2.4 ~cuda", when="+deepks")
     depends_on("py-torch@2.1:2.4 ~cuda", when="+mlalgo")
     depends_on("libnpy", when="+deepks")
@@ -351,7 +365,7 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         spec = self.spec
         args = [
             # --- shared variant -> option mapping (all versions) ---
-            self.define_from_variant("ENABLE_MPI", "mpi"),
+            self.define("ENABLE_MPI", True),
             self.define_from_variant("USE_OPENMP", "openmp"),
             self.define_from_variant("ENABLE_LCAO", "lcao"),
             self.define_from_variant("USE_ELPA", "elpa"),
@@ -413,7 +427,10 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         if "+libri" in spec:
             args.append(self.define("LIBRI_DIR", spec["libri"].prefix))
             args.append(self.define("LIBCOMM_DIR", spec["libcomm"].prefix))
-            if not spec.satisfies("@3.11.0-beta.6:"):
+            # Gate never fires on currently shipped versions (develop line is
+            # capped at 3.9.0.27); it future-proofs the args for a 3.11.x
+            # addition, where CMake finds these transitively.
+            if not spec.satisfies("@3.11.0:"):
                 args.append(self.define("ENABLE_LIBCOMM", True))
 
         # LibXC: FindLibxc uses Libxc_DIR (prefix) or pkg-config.
@@ -428,7 +445,10 @@ class Abacus(CMakePackage, CudaPackage, MakefilePackage):
         #   ParMETIS_DIR + SuperLU_DIST_DIR explicitly.
         if "+pexsi" in spec:
             args.append(self.define("PEXSI_DIR", spec["pexsi"].prefix))
-            if not spec.satisfies("@3.11.0-beta.6:"):
+            # Gate never fires on currently shipped versions (develop line is
+            # capped at 3.9.0.27); it future-proofs the args for a 3.11.x
+            # addition, where CMake finds these transitively.
+            if not spec.satisfies("@3.11.0:"):
                 args.append(self.define("ParMETIS_DIR", spec["parmetis"].prefix))
                 args.append(
                     self.define("SuperLU_DIST_DIR", spec["superlu-dist"].prefix)
